@@ -1,0 +1,36 @@
+software_dir = ../software
+
+queue = megraw
+
+db = ../data
+peat_peaks = $(db)/peat.full_original_dataset.TSS.strandREannotated_PEAT_STRAND_NAMED_corrected_upstream.csv
+
+roe_fwd = $(db)/peat_all100_roe_fwd.table
+roe_rev = $(db)/peat_all100_roe_fwd.table
+pwm = $(db)/peat_pwms.mat
+
+nucsAfterTSS = 5000
+BGWin = 250
+genome = $(db)/tair10/genome.fas
+
+outprefix = functionalTFBS_peat_root_DavidPeaks
+features_outdir = $(outprefix)/features_output
+
+all: %features_byNT.Rdat
+
+clean:
+	rm -f -r $(outprefix)
+
+# Filter peaks based on the location and read count
+%peaks.filtered: $(peat_peaks)
+	echo "mkdir -p $(outprefix); cat $(peat_peaks) | awk -F ',' '{if(NR == 1) {print \$$0} else if( \$$5 > 100 ) {print \$$0} }' | awk -F ',' '{if(NR == 1) {print \$$0} else if( \$$9 == \"tss\" || \$$9 == \"<250\" || \$$9 == \"<500\" || \$$9 == \"5'\''utr\") {print \$$0}}' > $(outprefix)/peaks.filtered" | \
+		SGE_Array -q $(queue) -r $(outprefix)/j0_filter_peaks
+
+# Get sequences for filtered peaks
+%peaks_region.fa : %peaks.filtered
+	echo "$(software_dir)/get_seqs.pl $(outprefix)/peaks.filtered $(nucsAfterTSS) $(nucsAfterTSS) $(genome) | $(software_dir)/dedup_fasta.sh > $(outprefix)/peaks_region.fa "| \
+                SGE_Array -m 10G -q $(queue) -r $(outprefix)/j1_get_peaks_seq --hold_names $(outprefix)/j0_filter_peaks
+
+# get features byNT for each seq
+%features_byNT.Rdat: %peaks_region.fa
+	echo $(software_dir)/get_scans_byNT.sh $(outprefix)/peaks_region.fa $(roe_fwd) $(roe_rev) $(pwm) $(nucsAfterTSS) 20 $(features_outdir) $(outprefix)/features_byNT.Rdat | SGE_Array -P 20 -q $(queue) -m 200G -r $(outprefix)/j2_get_scans_byNT --hold_names $(outprefix)/j1_get_peaks_seq
