@@ -36,7 +36,7 @@ count=1
 for seqfile in `ls $seqs_outdir/seq*`; do
 	if [ $count -lt $ncpu ]; then
 		outfile=$outdir/`basename $seqfile`.Rdat
-		java -Xms100G -Xmx200G -jar $tfbs_scan_jar GenFeaturesByNT -N $nucsAfterTSS -B $BGWin $roe_fwd $roe_rev $seqfile $pwm $outfile &
+		java -Xms10G -Xmx100G -jar $tfbs_scan_jar GenFeaturesByNT -N $nucsAfterTSS -B $BGWin $roe_fwd $roe_rev $seqfile $pwm $outfile &
 		let "count=count+1"
         else
                 echo "wait for batch to complete! (submitted = $count)"
@@ -48,9 +48,27 @@ wait
 
 echo "All finished!!!"
 
-cat $seq_prefix*.Rdat | grep -v "_FWD_" > $outdir/tmp.Rdat
-head -1 $seq_prefix"00.Rdat" | cat - $outdir/tmp.Rdat > $feature_file
+# Convert the tables to long-format
+#count=1
+#for f in $outdir/seq.*.Rdat; do
+#	if [ $count -lt $ncpu ]; then
+#		cat $f | software/wide_2_long.R > $f.long.txt &
+#		let "count=count+1"
+#	else
+#		echo "wait for batch to complete! (submitted = $count)"
+#               wait
+#                count=1
+#	fi
+#done
+#wait
+#
+# Filter headers
+cat $outdir/seq.*.Rdat | grep -v "_FWD_" > $outdir/tmp.Rdat
 
+# Add header back to the final file
+head -1 $outdir/seq.00.Rdat | cat - $outdir/tmp.Rdat > $feature_file
+
+echo "Cleaning up small files ... "
 rm -f $outdir/tmp.Rdat
 rm -f -r $outdir
 
